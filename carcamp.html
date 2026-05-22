@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>車泊規劃工具</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Noto Sans TC',sans-serif;background:#0f1117;color:#e8e8e8;min-height:100vh}
+
+/* 頂部導覽 */
+.nav{display:flex;background:#161820;border-bottom:1px solid #2a2e42;position:sticky;top:0;z-index:100}
+.nav-btn{flex:1;padding:14px;text-align:center;font-size:0.85rem;color:#666;cursor:pointer;border:none;background:none;font-family:inherit;border-bottom:2px solid transparent;transition:all 0.2s}
+.nav-btn.active{color:#4ade80;border-bottom-color:#4ade80}
+
+/* 設定頁 */
+.settings-page{padding:20px;max-width:600px;margin:0 auto}
+.settings-page h2{font-size:1rem;color:#888;margin-bottom:16px}
+.field-label{font-size:0.8rem;color:#666;margin-bottom:6px}
+.field-input{width:100%;background:#1e2130;border:1px solid #2e3248;border-radius:10px;padding:12px;color:#eee;font-size:0.9rem;font-family:inherit;outline:none;margin-bottom:16px}
+.field-input:focus{border-color:#4ade80}
+.save-btn{background:#4ade80;color:#0f1117;border:none;border-radius:10px;padding:10px 24px;font-weight:700;font-family:inherit;cursor:pointer;font-size:0.9rem}
+.api-status{font-size:0.78rem;margin-top:8px}
+.api-status.ok{color:#4ade80}
+.api-status.err{color:#ff6b6b}
+
+/* 規劃頁 */
+.plan-page{padding:16px;max-width:700px;margin:0 auto}
+.plan-form{background:#1e2130;border:1px solid #2a2e42;border-radius:14px;padding:16px;margin-bottom:16px}
+.plan-form h3{font-size:0.9rem;color:#aaa;margin-bottom:14px}
+.tag-group{margin-bottom:14px}
+.tag-group-label{font-size:0.78rem;color:#666;margin-bottom:6px}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{background:#1a1e2e;border:1px solid #2e3248;border-radius:20px;padding:5px 12px;font-size:0.78rem;color:#888;cursor:pointer;font-family:inherit;transition:all 0.15s}
+.tag.selected{background:#1a3a2a;border-color:#4ade80;color:#4ade80}
+.note-input{width:100%;background:#161820;border:1px solid #2e3248;border-radius:10px;padding:10px;color:#eee;font-family:inherit;font-size:0.85rem;resize:vertical;min-height:60px;outline:none;margin-top:10px}
+.note-input:focus{border-color:#4ade80}
+.plan-btn{width:100%;background:#4ade80;color:#0f1117;border:none;border-radius:10px;padding:13px;font-size:0.95rem;font-weight:700;font-family:inherit;cursor:pointer;margin-top:12px;transition:opacity 0.2s}
+.plan-btn:disabled{opacity:0.5;cursor:not-allowed}
+
+.result-box{background:#1e2130;border:1px solid #2a2e42;border-radius:14px;padding:16px;white-space:pre-wrap;font-size:0.85rem;line-height:1.8;color:#ccc}
+.result-box a{color:#4ade80}
+.thinking{color:#555;font-style:italic;font-size:0.85rem;padding:20px;text-align:center}
+
+/* 搜尋頁 */
+.search-page{padding:0}
+.search-sticky{position:sticky;top:44px;background:#0f1117;z-index:50;padding:12px 16px 10px}
+.search-row{display:flex;gap:8px;margin-bottom:10px}
+.search-input{flex:1;background:#1e2130;border:1px solid #2e3248;border-radius:10px;padding:11px 14px;color:#eee;font-size:0.9rem;font-family:inherit;outline:none}
+.search-input:focus{border-color:#4ade80}
+.search-input::placeholder{color:#444}
+.search-btn-go{background:#4ade80;color:#0f1117;border:none;border-radius:10px;padding:11px 18px;font-weight:700;font-family:inherit;cursor:pointer;font-size:0.85rem}
+.cat-filters{display:flex;gap:6px;flex-wrap:wrap}
+.cat-btn{background:#1e2130;border:1px solid #2e3248;border-radius:20px;padding:4px 11px;font-size:0.75rem;color:#666;cursor:pointer;font-family:inherit;transition:all 0.15s}
+.cat-btn.active{background:#4ade80;border-color:#4ade80;color:#0f1117;font-weight:700}
+.search-stats{padding:6px 16px;font-size:0.75rem;color:#444}
+
+.cards{padding:8px 16px 80px;display:flex;flex-direction:column;gap:8px}
+.card{background:#1e2130;border:1px solid #2a2e42;border-radius:12px;padding:14px;transition:border-color 0.15s}
+.card.has-note{border-left:3px solid #4ade80}
+.card-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+.cat-badge{font-size:0.68rem;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0;margin-top:2px}
+.cat-泊點{background:#1a3a4a;color:#4ac8ff;border:1px solid #4ac8ff33}
+.cat-澡點{background:#1a3a2a;color:#4ade80;border:1px solid #4ade8033}
+.cat-美食{background:#3a2a1a;color:#ffa04a;border:1px solid #ffa04a33}
+.cat-特約{background:#3a1a2a;color:#ff4a8a;border:1px solid #ff4a8a33}
+.cat-景點{background:#2a1a3a;color:#c44aff;border:1px solid #c44aff33}
+.cat-other{background:#222;color:#666;border:1px solid #33333333}
+.card-name{font-size:0.9rem;font-weight:500;color:#fff;flex:1;line-height:1.4}
+.card-desc{font-size:0.75rem;color:#555;line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card-actions{display:flex;gap:10px;align-items:center}
+.map-link{font-size:0.75rem;color:#4ade80;text-decoration:none}
+.note-toggle{font-size:0.75rem;color:#666;cursor:pointer;background:none;border:none;font-family:inherit;padding:0}
+.note-toggle:hover{color:#aaa}
+.note-area{margin-top:10px;display:none}
+.note-area.open{display:block}
+.note-textarea{width:100%;background:#161820;border:1px solid #2e3248;border-radius:8px;padding:8px 10px;color:#eee;font-family:inherit;font-size:0.8rem;resize:vertical;min-height:70px;outline:none}
+.note-textarea:focus{border-color:#4ade80}
+.note-save{background:#4ade80;color:#0f1117;border:none;border-radius:6px;padding:5px 14px;font-size:0.78rem;font-weight:700;font-family:inherit;cursor:pointer;margin-top:6px}
+.note-saved{font-size:0.75rem;color:#4ade80;margin-left:8px;opacity:0;transition:opacity 0.3s}
+.note-content{font-size:0.78rem;color:#4ade80;margin-top:6px;background:#0d1f14;border-radius:6px;padding:8px;line-height:1.6}
+
+.empty-hint{text-align:center;padding:50px 20px;color:#333;line-height:2.2;font-size:0.85rem}
+.hint-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:12px}
+.hint-chip{background:#1e2130;border:1px solid #2e3248;border-radius:20px;padding:4px 12px;font-size:0.75rem;color:#555;cursor:pointer}
+.hint-chip:hover{color:#4ade80;border-color:#4ade80}
+
+.page{display:none}
+.page.active{display:block}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <button class="nav-btn active" onclick="showPage('plan')">🗺 行程規劃</button>
+  <button class="nav-btn" onclick="showPage('search')">🔍 地點搜尋</button>
+  <button class="nav-btn" onclick="showPage('myplans')">📋 我的行程</button>
+  <button class="nav-btn" onclick="showPage('settings')">⚙️ 設定</button>
+</div>
+
+<!-- 設定頁 -->
+<div id="page-settings" class="page settings-page">
+  <h2>設定</h2>
+  <div class="field-label">Claude API Key</div>
+  <input type="password" class="field-input" id="apikey-input" placeholder="sk-ant-...">
+  <button class="save-btn" onclick="saveKey()">儲存</button>
+  <div class="api-status" id="api-status"></div>
+</div>
+
+<!-- 規劃頁 -->
+<div id="page-plan" class="page active plan-page">
+  <div class="plan-form">
+    <h3>告訴我你想去什麼樣的地方</h3>
+
+    <div class="tag-group">
+      <div class="tag-group-label">天數</div>
+      <div class="tags" id="tags-days">
+        <button class="tag selected" data-group="days" data-val="一日">一日</button>
+        <button class="tag" data-group="days" data-val="兩日一夜">兩日一夜</button>
+      </div>
+    </div>
+
+    <div class="tag-group">
+      <div class="tag-group-label">想要的感覺（可多選）</div>
+      <div class="tags" id="tags-vibe">
+        <button class="tag" data-group="vibe" data-val="放空休息">放空休息</button>
+        <button class="tag" data-group="vibe" data-val="爬山健行">爬山健行</button>
+        <button class="tag" data-group="vibe" data-val="泡溫泉">泡溫泉</button>
+        <button class="tag" data-group="vibe" data-val="海邊">海邊</button>
+        <button class="tag" data-group="vibe" data-val="跑步運動">跑步運動</button>
+        <button class="tag" data-group="vibe" data-val="美食">美食</button>
+        <button class="tag" data-group="vibe" data-val="看日出">看日出</button>
+        <button class="tag" data-group="vibe" data-val="安靜少人">安靜少人</button>
+      </div>
+    </div>
+
+    <div class="tag-group">
+      <div class="tag-group-label">偏好區域</div>
+      <div class="tags" id="tags-area">
+        <button class="tag selected" data-group="area" data-val="不限">不限</button>
+        <button class="tag" data-group="area" data-val="北部">北部</button>
+        <button class="tag" data-group="area" data-val="東部">東部</button>
+        <button class="tag" data-group="area" data-val="中部">中部</button>
+        <button class="tag" data-group="area" data-val="南部">南部</button>
+      </div>
+    </div>
+
+    <div class="tag-group">
+      <div class="tag-group-label">其他補充（可不填）</div>
+      <textarea class="note-input" id="extra-note" placeholder="例如：不要走山路、想看夜景、預算有限..."></textarea>
+    </div>
+
+    <button class="plan-btn" id="plan-btn" onclick="doPlan()">✨ 幫我規劃行程</button>
+  </div>
+
+  <div id="plan-result"></div>
+  <div id="save-plan-area" style="display:none;margin-top:12px">
+    <input type="text" id="plan-name" placeholder="幫這個行程取個名字..." class="field-input">
+    <button onclick="savePlan()" class="save-btn">儲存行程</button>
+    <span id="plan-saved" style="font-size:0.78rem;color:#4ade80;margin-left:8px;opacity:0;transition:opacity 0.3s"></span>
+  </div>
+</div>
+
+<!-- 我的行程頁 -->
+<div id="page-myplans" class="page" style="padding:16px;max-width:700px;margin:0 auto">
+  <h2 style="font-size:1rem;color:#888;margin-bottom:16px">我的行程</h2>
+  <div id="myplans-list"></div>
+</div>
+
+<!-- 搜尋頁 -->
+<div id="page-search" class="page search-page">
+  <div class="search-sticky">
+    <div class="search-row">
+      <input type="text" class="search-input" id="q" placeholder="搜尋地點、溫泉、宜蘭..." autocomplete="off">
+      <button class="search-btn-go" onclick="doSearch()">搜尋</button>
+    </div>
+    <div class="cat-filters" id="cat-filters"></div>
+  </div>
+  <div class="search-stats" id="search-stats"></div>
+  <div id="search-content">
+    <div class="empty-hint">
+      搜尋全台 3527 個車泊地點
+      <div class="hint-chips">
+        <span class="hint-chip" onclick="quickSearch('溫泉')">溫泉</span>
+        <span class="hint-chip" onclick="quickSearch('宜蘭')">宜蘭</span>
+        <span class="hint-chip" onclick="quickSearch('澡點')">澡點</span>
+        <span class="hint-chip" onclick="quickSearch('海邊')">海邊</span>
+        <span class="hint-chip" onclick="quickSearch('花蓮')">花蓮</span>
+        <span class="hint-chip" onclick="quickSearch('台東')">台東</span>
+        <span class="hint-chip" onclick="quickSearch('免費')">免費</span>
+        <span class="hint-chip" onclick="quickSearch('我的心得')" style="color:#4ade80;border-color:#4ade8044">⭐ 我的心得</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="carcamp_data.js"></script>
+<script>
+// ── 工具函式 ──
+const $ = id => document.getElementById(id);
+const NOTES_KEY = 'carcamp_notes';
+
+function getNotes() {
+  try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '{}'); } catch { return {}; }
+}
+function saveNote(key, text) {
+  const notes = getNotes();
+  if (text.trim()) notes[key] = text.trim();
+  else delete notes[key];
+  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+}
+function getNote(key) { return getNotes()[key] || ''; }
+
+function placeKey(p) { return `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`; }
+
+function getCatClass(c) {
+  if (c.includes('泊點')) return 'cat-泊點';
+  if (c.includes('澡點')) return 'cat-澡點';
+  if (c.includes('美食')) return 'cat-美食';
+  if (c.includes('特約')) return 'cat-特約';
+  if (c.includes('景點')) return 'cat-景點';
+  return 'cat-other';
+}
+function getCatLabel(c) {
+  if (c.includes('泊點')) return '泊點';
+  if (c.includes('澡點')) return '澡點';
+  if (c.includes('美食')) return '美食';
+  if (c.includes('特約')) return '特約';
+  if (c.includes('景點')) return '景點';
+  if (c.includes('宿店')) return '宿店';
+  return c.slice(0,4);
+}
+
+// ── 頁面切換 ──
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  $('page-' + name).classList.add('active');
+  if (name === 'myplans') renderMyPlans();
+  const idx = {plan:0, search:1, myplans:2, settings:3}[name];
+  document.querySelectorAll('.nav-btn')[idx].classList.add('active');
+}
+
+// ── 設定 ──
+function saveKey() {
+  const key = $('apikey-input').value.trim();
+  if (key) { localStorage.setItem('claude_key', key); $('api-status').textContent = '✅ 已儲存'; $('api-status').className = 'api-status ok'; }
+}
+function loadKey() {
+  const k = localStorage.getItem('claude_key') || '';
+  if (k) { $('apikey-input').value = k; $('api-status').textContent = '✅ API Key 已設定'; $('api-status').className = 'api-status ok'; }
+}
+
+// ── 標籤選取 ──
+document.querySelectorAll('.tag').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const group = btn.dataset.group;
+    const isMulti = group === 'vibe';
+    if (!isMulti) {
+      document.querySelectorAll(`.tag[data-group="${group}"]`).forEach(b => b.classList.remove('selected'));
+    }
+    btn.classList.toggle('selected');
+  });
+});
+
+function getSelected(group) {
+  return [...document.querySelectorAll(`.tag[data-group="${group}"].selected`)].map(b => b.dataset.val);
+}
+
+// ── 行程規劃 ──
+async function doPlan() {
+  const apiKey = localStorage.getItem('claude_key');
+  if (!apiKey) { alert('請先到「設定」頁輸入 API Key'); showPage('settings'); return; }
+
+  const days = getSelected('days')[0] || '一日';
+  const vibes = getSelected('vibe');
+  const area = getSelected('area')[0] || '不限';
+  const extra = $('extra-note').value.trim();
+
+  if (vibes.length === 0) { alert('請選擇至少一種想要的感覺'); return; }
+
+  const btn = $('plan-btn');
+  btn.disabled = true;
+  btn.textContent = '規劃中...';
+  $('plan-result').innerHTML = '<div class="thinking">Claude 正在為你規劃行程，請稍候...</div>';
+
+  // 從 KML 資料篩選相關地點給 Claude 參考
+  const notes = getNotes();
+  const keywords = vibes.join(' ') + ' ' + area;
+  const kws = keywords.toLowerCase().split(/\s+/);
+
+  // 篩選泊點和澡點為主
+  let candidates = PLACES.filter(p => {
+    const text = (p.n + ' ' + p.d).toLowerCase();
+    // 地區篩選
+    if (area !== '不限') {
+      const areaMap = { '北部': ['台北','新北','基隆','桃園','新竹','宜蘭','苗栗'], '中部': ['台中','彰化','南投','雲林'], '南部': ['嘉義','台南','高雄','屏東'], '東部': ['花蓮','台東'] };
+      const regions = areaMap[area] || [];
+      if (regions.length && !regions.some(r => text.includes(r) || p.n.includes(r))) return false;
+    }
+    return p.c.includes('泊點') || p.c.includes('澡點') || p.c.includes('景點');
+  }).slice(0, 80);
+
+  // 有心得的優先
+  const withNotes = candidates.filter(p => getNote(placeKey(p)));
+
+  const placeList = candidates.slice(0, 60).map(p => {
+    const note = getNote(placeKey(p));
+    return `- ${p.n}（${getCatLabel(p.c)}）${p.d ? '：' + p.d.slice(0,80) : ''}${note ? ' [我的心得：' + note + ']' : ''}`;
+  }).join('\n');
+
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const season = month >= 3 && month <= 5 ? '春季' : month >= 6 && month <= 8 ? '夏季' : month >= 9 && month <= 11 ? '秋季' : '冬季';
+  const dateStr = `${now.getFullYear()}年${month}月，目前季節：${season}`;
+
+  const prompt = `今天是 ${dateStr}。請考慮當季的天氣、花景、農產、節慶等季節性因素來推薦。
+
+你是台灣車泊旅遊規劃助理。使用者從台北出發，請用以下邏輯規劃：
+
+1. 先選定一個主要泊點（不是路線，是定點）
+2. 再找泊點附近 30 分鐘車程內的澡點、美食、景點
+3. 北部限制：從台北出發單程不超過 1.5 小時
+
+天數：${days}
+想要的感覺：${vibes.join('、')}
+偏好區域：${area}
+${extra ? '其他需求：' + extra : ''}
+
+可參考地點資料：
+${placeList}
+
+請提供「方案一」和「方案二」兩個不同的泊點選項，兩個方案的地點不能重複。
+
+每個方案格式如下：
+---
+【方案一】
+【主要泊點】：說明為什麼選這裡
+【附近澡點】：泊點 30 分鐘內
+【附近美食】：推薦 1-2 個
+【附近景點/活動】：符合使用者想要的感覺
+【時間安排】：簡單的一日或兩日時間表
+【實用提醒】：2-3 點注意事項
+---
+【方案二】
+（同上格式）
+---
+
+用繁體中文，地點名稱用【】標示。`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2000, tools: [{ type: 'web_search_20250305', name: 'web_search' }], messages: [{ role: 'user', content: prompt }] })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+
+    const text_blocks = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    let text = text_blocks;
+    const SKIP = ['主要泊點', '附近澡點', '附近美食', '附近景點', '附近景點/活動', '時間安排', '實用提醒', '方案一', '方案二'];
+    text = text.replace(/【([^】]+)】/g, (match, name) => {
+      if (SKIP.includes(name.trim())) return match;
+      const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(name)}+台灣`;
+      return `<a href="${mapsUrl}" target="_blank">【${name} 📍】</a>`;
+    });
+
+    $('plan-result').innerHTML = `<div class="result-box">${text}</div>`;
+    $('save-plan-area').style.display = 'block';
+  } catch (e) {
+    $('plan-result').innerHTML = `<div class="result-box" style="color:#ff6b6b">❌ 錯誤：${e.message}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = '✨ 幫我規劃行程';
+}
+
+// ── 搜尋 ──
+const CATS = ['全部', '泊點', '澡點(參考)', '美食', '特約', '景點 - 路況'];
+let activeCat = '全部';
+
+function initCatFilters() {
+  const div = $('cat-filters');
+  CATS.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-btn' + (cat === '全部' ? ' active' : '');
+    btn.textContent = getCatLabel(cat) || cat;
+    btn.onclick = () => {
+      activeCat = cat;
+      document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      doSearch();
+    };
+    div.appendChild(btn);
+  });
+}
+
+function quickSearch(kw) {
+  $('q').value = kw === '我的心得' ? '' : kw;
+  if (kw === '我的心得') { activeCat = '全部'; document.querySelectorAll('.cat-btn').forEach((b,i)=>{ b.classList.toggle('active', i===0); }); }
+  doSearch(kw === '我的心得' ? 'notes_only' : null);
+  showPage('search');
+}
+
+function doSearch(mode) {
+  const q = $('q').value.trim();
+  const notes = getNotes();
+  const notesOnly = mode === 'notes_only';
+
+  if (!q && activeCat === '全部' && !notesOnly) {
+    $('search-content').innerHTML = `<div class="empty-hint">搜尋全台 3527 個車泊地點<div class="hint-chips"><span class="hint-chip" onclick="quickSearch('溫泉')">溫泉</span><span class="hint-chip" onclick="quickSearch('宜蘭')">宜蘭</span><span class="hint-chip" onclick="quickSearch('澡點')">澡點</span><span class="hint-chip" onclick="quickSearch('海邊')">海邊</span><span class="hint-chip" onclick="quickSearch('花蓮')">花蓮</span><span class="hint-chip" onclick="quickSearch('台東')">台東</span><span class="hint-chip" onclick="quickSearch('免費')">免費</span><span class="hint-chip" onclick="quickSearch('我的心得')" style="color:#4ade80;border-color:#4ade8044">⭐ 我的心得</span></div></div>`;
+    $('search-stats').textContent = '';
+    return;
+  }
+
+  const kws = q.toLowerCase().split(/\s+/).filter(Boolean);
+
+  let results = PLACES.filter(p => {
+    if (activeCat !== '全部' && p.c !== activeCat) return false;
+    const key = placeKey(p);
+    const note = notes[key] || '';
+    if (notesOnly) return !!note;
+    if (kws.length === 0) return true;
+    const text = (p.n + ' ' + p.d + ' ' + note).toLowerCase();
+    return kws.every(k => text.includes(k));
+  });
+
+  // 有心得的排前面
+  results.sort((a, b) => {
+    const an = !!notes[placeKey(a)], bn = !!notes[placeKey(b)];
+    return bn - an;
+  });
+
+  $('search-stats').textContent = results.length ? `找到 ${results.length} 個地點${notesOnly ? '（有心得）' : ''}` : '';
+
+  if (!results.length) {
+    $('search-content').innerHTML = `<div class="empty-hint">沒有找到符合的地點</div>`;
+    return;
+  }
+
+  const shown = results.slice(0, 60);
+  $('search-content').innerHTML = `<div class="cards">${shown.map(p => renderCard(p, notes)).join('')}</div>${results.length > 60 ? `<div class="empty-hint">顯示前 60 筆，共 ${results.length} 筆</div>` : ''}`;
+}
+
+function renderCard(p, notes) {
+  const key = placeKey(p);
+  const note = (notes || getNotes())[key] || '';
+  const mapsUrl = `https://www.google.com/maps?q=${p.lat},${p.lng}`;
+  const desc = p.d ? p.d.replace(/\s+/g, ' ').trim() : '';
+  const uid = key.replace(/[.,]/g, '_');
+
+  return `<div class="card ${note ? 'has-note' : ''}" id="card_${uid}">
+    <div class="card-top">
+      <span class="cat-badge ${getCatClass(p.c)}">${getCatLabel(p.c)}</span>
+      <span class="card-name">${p.n}</span>
+    </div>
+    ${desc ? `<div class="card-desc">${desc}</div>` : ''}
+    <div class="card-actions">
+      <a class="map-link" href="${mapsUrl}" target="_blank">📍 Google Maps</a>
+      <button class="note-toggle" onclick="toggleNote('${uid}')">✏️ ${note ? '編輯心得' : '寫心得'}</button>
+    </div>
+    <div class="note-area ${note ? 'open' : ''}" id="note_${uid}">
+      ${note ? `<div class="note-content">💬 ${note}</div>` : ''}
+      <textarea class="note-textarea" id="ta_${uid}" placeholder="寫下你的心得、注意事項...">${note}</textarea>
+      <div style="display:flex;align-items:center">
+        <button class="note-save" onclick="doSaveNote('${uid}','${key}')">儲存</button>
+        <span class="note-saved" id="saved_${uid}">✅ 已儲存</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleNote(uid) {
+  const area = $('note_' + uid);
+  area.classList.toggle('open');
+  if (area.classList.contains('open')) {
+    setTimeout(() => $('ta_' + uid)?.focus(), 100);
+  }
+}
+
+function doSaveNote(uid, key) {
+  const text = $('ta_' + uid).value;
+  saveNote(key, text);
+  const card = $('card_' + uid);
+  if (text.trim()) card.classList.add('has-note');
+  else card.classList.remove('has-note');
+  // 更新顯示
+  const noteContent = card.querySelector('.note-content');
+  if (text.trim()) {
+    if (noteContent) noteContent.textContent = '💬 ' + text.trim();
+    else {
+      const area = $('note_' + uid);
+      area.insertAdjacentHTML('afterbegin', `<div class="note-content">💬 ${text.trim()}</div>`);
+    }
+  } else if (noteContent) noteContent.remove();
+  // 顯示已儲存
+  const saved = $('saved_' + uid);
+  saved.style.opacity = '1';
+  setTimeout(() => saved.style.opacity = '0', 1500);
+  // 更新按鈕文字
+  card.querySelector('.note-toggle').textContent = '✏️ ' + (text.trim() ? '編輯心得' : '寫心得');
+}
+
+function savePlan() {
+  const name = $('plan-name').value.trim() || '未命名行程';
+  const content = $('plan-result').innerHTML;
+  const plans = JSON.parse(localStorage.getItem('carcamp_plans') || '[]');
+  plans.unshift({ name, content, date: new Date().toLocaleDateString('zh-TW') });
+  localStorage.setItem('carcamp_plans', JSON.stringify(plans));
+  const saved = $('plan-saved');
+  saved.textContent = '✅ 已儲存';
+  saved.style.opacity = '1';
+  setTimeout(() => saved.style.opacity = '0', 2000);
+}
+
+function renderMyPlans() {
+  const plans = JSON.parse(localStorage.getItem('carcamp_plans') || '[]');
+  const el = $('myplans-list');
+  if (!plans.length) {
+    el.innerHTML = '<div style="color:#444;text-align:center;padding:40px 0;font-size:0.85rem">還沒有儲存的行程</div>';
+    return;
+  }
+  el.innerHTML = plans.map((p, i) => `
+    <div style="background:#1e2130;border:1px solid #2a2e42;border-radius:12px;margin-bottom:10px;overflow:hidden">
+      <div style="display:flex;align-items:center;padding:12px 14px;gap:10px;cursor:pointer" onclick="togglePlan(${i})">
+        <div style="flex:1">
+          <div style="font-size:0.9rem;font-weight:500;color:#fff">${p.name}</div>
+          <div style="font-size:0.75rem;color:#555;margin-top:2px">${p.date}</div>
+        </div>
+        <button onclick="event.stopPropagation();deletePlan(${i})" style="background:none;border:none;color:#555;cursor:pointer;font-size:0.8rem;padding:4px 8px;border-radius:6px;font-family:inherit" onmouseover="this.style.color='#ff6b6b'" onmouseout="this.style.color='#555'">刪除</button>
+        <span id="arrow_${i}" style="color:#555;font-size:0.75rem">▼</span>
+      </div>
+      <div id="plan_body_${i}" style="display:none;padding:0 14px 14px;border-top:1px solid #2a2e42">${p.content}</div>
+    </div>
+  `).join('');
+}
+
+function togglePlan(i) {
+  const body = $('plan_body_' + i);
+  const arrow = $('arrow_' + i);
+  const open = body.style.display === 'block';
+  body.style.display = open ? 'none' : 'block';
+  arrow.textContent = open ? '▼' : '▲';
+}
+
+function deletePlan(i) {
+  const plans = JSON.parse(localStorage.getItem('carcamp_plans') || '[]');
+  plans.splice(i, 1);
+  localStorage.setItem('carcamp_plans', JSON.stringify(plans));
+  renderMyPlans();
+}
+
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+initCatFilters();
+loadKey();
+</script>
+</body>
+</html>
