@@ -118,6 +118,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:#0f1117;color:#e8e8e8;min-
       <div class="tags" id="tags-days">
         <button class="tag selected" data-group="days" data-val="一日">一日</button>
         <button class="tag" data-group="days" data-val="兩日一夜">兩日一夜</button>
+        <button class="tag" data-group="days" data-val="三日兩夜">三日兩夜</button>
       </div>
     </div>
 
@@ -132,6 +133,9 @@ body{font-family:'Noto Sans TC',sans-serif;background:#0f1117;color:#e8e8e8;min-
         <button class="tag" data-group="vibe" data-val="美食">美食</button>
         <button class="tag" data-group="vibe" data-val="看日出">看日出</button>
         <button class="tag" data-group="vibe" data-val="安靜少人">安靜少人</button>
+      </div>
+      <div style="margin-top:8px">
+        <input type="text" id="custom-vibe" class="field-input" placeholder="其他關鍵字，例如：瀑布、單車、夜市..." style="margin-bottom:0">
       </div>
     </div>
 
@@ -275,6 +279,8 @@ async function doPlan() {
 
   const days = getSelected('days')[0] || '一日';
   const vibes = getSelected('vibe');
+  const customVibe = document.getElementById('custom-vibe').value.trim();
+  if (customVibe) vibes.push(customVibe);
   const area = getSelected('area')[0] || '不限';
   const extra = $('extra-note').value.trim();
 
@@ -340,12 +346,49 @@ async function doPlan() {
     }
   } catch (e) { /* 網路失敗，跳過願望清單 */ }
 
+  // 抓取親身心得（工作表2，gid=1111542863）
+  let personalNotesSection = '';
+  try {
+    const notesRes = await fetch('https://docs.google.com/spreadsheets/d/1g4ZclmlMp0Lddm-DVioONmY72WX9zwH4ZHOYbx3Ic80/export?format=csv&gid=1111542863');
+    if (notesRes.ok) {
+      const notesCsv = await notesRes.text();
+      const notesLines = notesCsv.split('\n')
+        .map(line => line.replace(/^"|"$/g, '').trim())
+        .filter(line => line.length > 5);
+      if (notesLines.length > 0) {
+        personalNotesSection = `\n使用者親身去過的車泊心得（供參考，不必優先選擇這些地點，但若行程中出現這些地點，請把心得內容納入說明）：\n` + notesLines.map(l => `- ${l}`).join('\n') + '\n';
+      }
+    }
+  } catch(e) {}
+
+  // 抓取心得（工作表2，gid=1）
+  let notesSection = '';
+  try {
+    const NOTES_URL = 'https://docs.google.com/spreadsheets/d/1g4ZclmlMp0Lddm-DVioONmY72WX9zwH4ZHOYbx3Ic80/export?format=csv&gid=1';
+    const notesRes = await fetch(NOTES_URL);
+    const notesCsv = await notesRes.text();
+    const notesRows = notesCsv.trim().split('\n').map(parseRow);
+    const notesHeaders = notesRows[0].map(h => h.toLowerCase());
+    const iPlace = notesHeaders.findIndex(h => ['地點','place','name','名稱'].some(k => h.includes(k)));
+    const iNote = notesHeaders.findIndex(h => ['心得','note','content','備註'].some(k => h.includes(k)));
+    const pi = iPlace >= 0 ? iPlace : 0;
+    const ni = iNote >= 0 ? iNote : 1;
+    const noteItems = notesRows.slice(1).map(r => {
+      const place = (r[pi] || '').trim();
+      const note = (r[ni] || '').trim();
+      return place && note ? `- ${place}：${note}` : null;
+    }).filter(Boolean);
+    if (noteItems.length) {
+      notesSection = `使用者親身去過的車泊心得（供參考，不必優先選擇這些地點，但若行程中出現這些地點，請把心得內容納入說明）：\n${noteItems.join('\n')}\n\n`;
+    }
+  } catch (e) { /* 網路失敗，跳過心得 */ }
+
   const now = new Date();
   const month = now.getMonth() + 1;
   const season = month >= 3 && month <= 5 ? '春季' : month >= 6 && month <= 8 ? '夏季' : month >= 9 && month <= 11 ? '秋季' : '冬季';
   const dateStr = `${now.getFullYear()}年${month}月，目前季節：${season}`;
 
-  const prompt = `${wishlistSection}今天是 ${dateStr}。請考慮當季的天氣、花景、農產、節慶等季節性因素來推薦。
+  const prompt = `${wishlistSection}${personalNotesSection}今天是 ${dateStr}。請考慮當季的天氣、花景、農產、節慶等季節性因素來推薦。
 
 你是台灣車泊旅遊規劃助理。使用者從台北出發，請用以下邏輯規劃：
 
@@ -533,13 +576,25 @@ function doSaveNote(uid, key) {
   card.querySelector('.note-toggle').textContent = '✏️ ' + (text.trim() ? '編輯心得' : '寫心得');
 }
 
-function savePlan() {
-  const name = $('plan-name').value.trim() || '未命名行程';
-  const content = $('plan-result').innerHTML;
+async function savePlan() {
+  const name = document.getElementById('plan-name').value.trim() || '未命名行程';
+  const content = document.getElementById('plan-result').innerText;
+
+  // 存到 localStorage
   const plans = JSON.parse(localStorage.getItem('carcamp_plans') || '[]');
   plans.unshift({ name, content, date: new Date().toLocaleDateString('zh-TW') });
   localStorage.setItem('carcamp_plans', JSON.stringify(plans));
-  const saved = $('plan-saved');
+
+  // 存到 Google Sheets
+  try {
+    await fetch('https://script.google.com/macros/s/AKfycbyYyLoPfd_SUn1FiNIW_I8ufA5kSiehEpuT_rVqOKWp2ucY34Yr8QEyBoDINWw_J6Dh/exec', {
+      method: 'POST',
+      body: JSON.stringify({ name, content }),
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch(e) {}
+
+  const saved = document.getElementById('plan-saved');
   saved.textContent = '✅ 已儲存';
   saved.style.opacity = '1';
   setTimeout(() => saved.style.opacity = '0', 2000);
