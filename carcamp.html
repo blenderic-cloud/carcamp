@@ -590,7 +590,7 @@ async function savePlan() {
     await fetch('https://script.google.com/macros/s/AKfycbyYyLoPfd_SUn1FiNIW_I8ufA5kSiehEpuT_rVqOKWp2ucY34Yr8QEyBoDINWw_J6Dh/exec', {
       method: 'POST',
       body: JSON.stringify({ name, content }),
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'text/plain' }
     });
   } catch(e) {}
 
