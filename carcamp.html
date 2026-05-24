@@ -310,12 +310,42 @@ async function doPlan() {
     return `- ${p.n}（${getCatLabel(p.c)}）${p.d ? '：' + p.d.slice(0,80) : ''}${note ? ' [我的心得：' + note + ']' : ''}`;
   }).join('\n');
 
+  // 抓取願望清單（失敗時靜默跳過）
+  let wishlistSection = '';
+  try {
+    const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1g4ZclmlMp0Lddm-DVioONmY72WX9zwH4ZHOYbx3Ic80/export?format=csv&gid=0';
+    const csvRes = await fetch(SHEET_URL);
+    const csvText = await csvRes.text();
+    const parseRow = line => {
+      const row = []; let cur = '', inQ = false;
+      for (const ch of line) {
+        if (ch === '"') inQ = !inQ;
+        else if (ch === ',' && !inQ) { row.push(cur.trim()); cur = ''; }
+        else cur += ch;
+      }
+      row.push(cur.trim());
+      return row;
+    };
+    const rows = csvText.trim().split('\n').map(parseRow);
+    const headers = rows[0];
+    const iContent = headers.indexOf('content');
+    const iTags = headers.indexOf('tags');
+    const items = rows.slice(1).map(r => {
+      const content = (r[iContent] || '').trim();
+      const tags = (r[iTags] || '').trim();
+      return content ? `- ${content}${tags ? `（標籤：${tags}）` : ''}` : null;
+    }).filter(Boolean);
+    if (items.length) {
+      wishlistSection = `這是使用者的願望清單，規劃時請優先考慮這些地點：\n${items.join('\n')}\n\n`;
+    }
+  } catch (e) { /* 網路失敗，跳過願望清單 */ }
+
   const now = new Date();
   const month = now.getMonth() + 1;
   const season = month >= 3 && month <= 5 ? '春季' : month >= 6 && month <= 8 ? '夏季' : month >= 9 && month <= 11 ? '秋季' : '冬季';
   const dateStr = `${now.getFullYear()}年${month}月，目前季節：${season}`;
 
-  const prompt = `今天是 ${dateStr}。請考慮當季的天氣、花景、農產、節慶等季節性因素來推薦。
+  const prompt = `${wishlistSection}今天是 ${dateStr}。請考慮當季的天氣、花景、農產、節慶等季節性因素來推薦。
 
 你是台灣車泊旅遊規劃助理。使用者從台北出發，請用以下邏輯規劃：
 
@@ -558,3 +588,4 @@ loadKey();
 </script>
 </body>
 </html>
+
